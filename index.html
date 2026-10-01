@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Контур — конструктор 3D-диаграмм</title>
+  <meta name="description" content="Контур — бесплатный конструктор интерактивных 3D-диаграмм из CSV и JSON. Работает в браузере, данные никуда не отправляются.">
+  <link rel="icon" type="image/png" href="icons/icon32.png">
+  <link rel="apple-touch-icon" href="icons/icon128.png">
+  <script>if(!crypto.randomUUID){crypto.randomUUID=function(){return"10000000-1000-4000-8000-100000000000".replace(/[018]/g,function(c){return(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)})}}</script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="editor-page">
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-ring" aria-hidden="true"></span><strong>КОНТУР</strong><span class="brand-separator"></span><span class="brand-context">Конструктор 3D-диаграмм</span></div>
+      <div class="top-actions">
+        <span class="save-state" id="save-state" role="status">Готово к работе</span>
+        <button class="button subtle" id="new-project" type="button">Новый проект</button>
+        <button class="button" id="save-project" type="button">Сохранить</button>
+        <button class="button subtle" id="export-project" type="button" title="Скачать проект файлом .kontur.json">Проект → файл</button>
+        <button class="button subtle" id="import-project" type="button" title="Открыть проект из файла .kontur.json">Открыть файл</button>
+        <input id="import-project-file" type="file" accept=".json,application/json" hidden>
+        <button class="button primary" id="export-html" type="button">Экспорт HTML</button>
+      </div>
+    </header>
+    <main class="editor-layout">
+      <aside class="settings" aria-label="Настройки презентации">
+        <div class="settings-heading"><div><span class="overline">ПРОЕКТ</span><h1>Настройка</h1></div><span class="version-tag">Локально</span></div>
+        <section class="settings-section pages-section" aria-labelledby="pages-section">
+          <div class="section-heading"><h2 id="pages-section">Страницы</h2><span id="pages-count" class="small-meta">1 страница</span></div>
+          <label class="field-label" for="presentation-name">Название презентации</label>
+          <input id="presentation-name" class="field" type="text" maxlength="100" placeholder="Название проекта">
+          <div id="page-list" class="page-list" aria-label="Страницы презентации"></div>
+          <div class="page-add"><button id="add-chart-page" class="button" type="button">+ Диаграмма</button><button id="add-cover-page" class="button" type="button">+ Титульная</button></div>
+          <div class="page-actions"><button id="duplicate-page" class="button subtle" type="button">Дублировать</button><button id="delete-page" class="button subtle" type="button">Удалить страницу</button></div>
+        </section>
+        <section class="settings-section" aria-labelledby="project-section">
+          <h2 id="project-section">Текущая страница</h2>
+          <label class="field-label" for="project-title">Заголовок страницы</label>
+          <input id="project-title" class="field" type="text" maxlength="100" placeholder="Например, Продажи по странам">
+          <label class="field-label" for="project-subtitle">Подпись</label>
+          <input id="project-subtitle" class="field" type="text" maxlength="160" placeholder="Короткое пояснение">
+          <div id="cover-text-field" hidden><label class="field-label" for="page-body">Основной текст</label><textarea id="page-body" class="field textarea-field" rows="5" maxlength="800" placeholder="Текст титульной страницы"></textarea></div>
+          <label class="field-label" for="saved-projects">Сохранённые проекты</label>
+          <select id="saved-projects" class="field"><option value="">Текущий проект</option></select>
+        </section>
+        <section id="data-settings" class="settings-section" aria-labelledby="data-section">
+          <div class="section-heading"><h2 id="data-section">Данные</h2><span id="row-count" class="small-meta">Демо-данные</span></div>
+          <label class="field-label" for="data-file">Загрузить CSV или JSON</label>
+          <input id="data-file" class="file-field" type="file" accept=".csv,.json,text/csv,application/json">
+          <p class="help">Файл обрабатывается в браузере. Первая строка CSV — названия столбцов.</p>
+          <p id="data-target-hint" class="help data-target-hint" hidden>Данные относятся к выбранной диаграмме. Чтобы загрузить другие данные в другую диаграмму, кликните по её окну.</p>
+          <button id="manual-mode" class="button manual-toggle" type="button" aria-pressed="false">Ввести данные вручную</button>
+          <div id="manual-panel" class="manual-panel" hidden>
+            <div class="manual-head"><strong>Категория</strong><strong>Значение</strong></div>
+            <div id="manual-rows" class="manual-rows"></div>
+            <div class="manual-actions"><button id="add-manual-row" class="button" type="button">+ Добавить строку</button><button id="clear-manual" class="button subtle" type="button">Очистить</button></div>
+          </div>
+          <div id="field-mapping">
+            <label class="field-label" for="category-field">Категория</label>
+            <select id="category-field" class="field"></select>
+            <label class="field-label" for="value-field">Значение</label>
+            <select id="value-field" class="field"></select>
+          </div>
+          <div id="data-message" class="message" role="status"></div>
+        </section>
+        <section id="chart-settings" class="settings-section" aria-labelledby="chart-section">
+          <div class="section-heading"><h2 id="chart-section">Вид выбранной диаграммы</h2><span id="chart-count" class="small-meta">1 из 4</span></div>
+          <div class="chart-options" role="group" aria-label="Вид диаграммы">
+            <button type="button" class="chart-option" data-chart="donut" aria-pressed="true"><span class="chart-icon donut-icon" aria-hidden="true"></span><span><strong>3D Donut</strong><small>Доли и структура</small></span></button>
+            <button type="button" class="chart-option" data-chart="bar" aria-pressed="false"><span class="chart-icon bar-icon" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>3D Bar</strong><small>Сравнение значений</small></span></button>
+            <button type="button" class="chart-option" data-chart="exploded" aria-pressed="false"><span class="chart-icon stack-icon" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>Круговые слои</strong><small>Объёмная диаграмма с подписями</small></span></button>
+            <button type="button" class="chart-option" data-chart="funnel" aria-pressed="false"><span class="chart-icon funnel-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span><strong>3D-воронка</strong><small>Этапы и их значения</small></span></button>
+            <button type="button" class="chart-option" data-chart="spheres" aria-pressed="false"><span class="chart-icon spheres-icon" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>3D-шары</strong><small>Размер прямо пропорционален значению</small></span></button>
+            <button type="button" class="chart-option" data-chart="bubble" aria-pressed="false"><span class="chart-icon bubble-icon" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>3D Bubble</strong><small>Связь трёх показателей</small></span></button>
+          </div>
+          <button id="add-chart-instance" class="button add-chart-instance" type="button">＋ Добавить диаграмму</button>
+        </section>
+        <section id="funnel-text-settings" class="settings-section" aria-labelledby="funnel-text-title" hidden>
+          <div class="section-heading"><h2 id="funnel-text-title">Текст этапов</h2><span class="small-meta">Заголовок и пояснение</span></div>
+          <div id="funnel-stage-texts" class="funnel-stage-texts"></div>
+        </section>
+        <section id="bubble-settings" class="settings-section" aria-labelledby="bubble-settings-title" hidden>
+          <div class="section-heading"><h2 id="bubble-settings-title">Параметры 3D Bubble</h2><span id="bubble-row-count" class="small-meta"></span></div>
+          <button id="bubble-sample" class="button" type="button">Загрузить пример 3D Bubble</button>
+          <p class="help">X задаёт время или категорию, Y — положение по вертикали, Z — размер сферы. Цвет разделяет серии.</p>
+          <label class="field-label" for="bubble-x-field">Ось X</label><select id="bubble-x-field" class="field"></select>
+          <label class="field-label" for="bubble-y-field">Ось Y</label><select id="bubble-y-field" class="field"></select>
+          <label class="field-label" for="bubble-size-field">Размер сферы (Z)</label><select id="bubble-size-field" class="field"></select>
+          <label class="field-label" for="bubble-series-field">Серии / цвет</label><select id="bubble-series-field" class="field"></select>
+          <label class="field-label" for="bubble-x-title">Подпись оси X</label><input id="bubble-x-title" class="field" type="text" maxlength="80">
+          <label class="field-label" for="bubble-y-title">Подпись оси Y</label><input id="bubble-y-title" class="field" type="text" maxlength="80">
+          <label class="field-label" for="bubble-y-max">Максимум оси Y</label><input id="bubble-y-max" class="field" type="number" min="0.01" step="any">
+          <label class="field-label" for="bubble-ticks">Деления оси X</label><input id="bubble-ticks" class="field" type="number" min="2" max="24" step="1">
+          <label class="field-label" for="bubble-height">Высота диаграммы</label><input id="bubble-height" class="field" type="number" min="260" max="900" step="10" placeholder="Авто">
+          <label class="check-field"><input id="bubble-data-labels" type="checkbox"><span>Показывать значения возле сфер</span></label>
+          <label class="check-field"><input id="bubble-gradient" type="checkbox"><span>Градиентная заливка сфер</span></label>
+        </section>
+        <section id="style-settings" class="settings-section" aria-labelledby="style-section">
+          <h2 id="style-section">Оформление</h2>
+          <label class="field-label" for="palette">Палитра</label>
+          <select id="palette" class="field"><option value="iris">Ирис</option><option value="ocean">Океан</option><option value="sunset">Закат</option></select>
+          <label class="field-label" for="animation">Анимация</label>
+          <select id="animation" class="field"><option value="entrance">Появление</option><option value="spin">Плавное вращение</option><option value="none">Без анимации</option></select>
+        </section>
+      </aside>
+      <section class="main-panel" aria-label="Предпросмотр">
+        <div class="preview-top"><div><span class="overline" id="preview-kicker">СТРАНИЦА 1 ИЗ 1</span><h2 id="preview-title">Продажи по странам</h2><p id="preview-subtitle">Демо-данные · млн $</p></div><div class="preview-badge" id="preview-badge"><span class="live-dot"></span>Интерактивная модель</div></div>
+        <div id="charts-board" class="charts-board" aria-label="Диаграммы на странице"></div>
+        <div id="cover-preview" class="cover-preview" hidden><div class="cover-orbit" aria-hidden="true"></div><div class="cover-content"><span class="overline">ПРЕЗЕНТАЦИЯ</span><h2 id="cover-title"></h2><p id="cover-subtitle"></p><div id="cover-body"></div></div></div>
+        <nav class="preview-nav" aria-label="Навигация по страницам"><button id="previous-page" class="button" type="button">← Назад</button><span id="page-position">1 / 1</span><button id="next-page" class="button" type="button">Вперёд →</button></nav>
+        <div id="below-preview" class="below-preview"><div class="legend-panel"><div class="panel-heading"><h3>Значения выбранной диаграммы</h3><span id="total-label">Итого</span></div><div id="legend" class="legend"></div></div><div class="table-panel"><div class="panel-heading"><h3>Исходные данные</h3><span id="table-caption">Первые строки файла</span></div><div class="table-scroll"><table id="data-table"></table></div></div></div>
+      </section>
+    </main>
+  </div>
+  <script src="editor.js" defer></script>
+</body>
+</html>
